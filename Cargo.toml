@@ -1,0 +1,7 @@
+[workspace]
+
+members = [
+    "sqlplot-rs",
+    "sqlplot-rs-core",
+    "sqlplot-rs-derive",
+]

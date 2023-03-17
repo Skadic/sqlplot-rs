@@ -1,0 +1,5 @@
+error: may only contain ascii alphanumeric characters and underscores
+ --> tests/test_code/invalid_rename_non_ascii_test.rs:5:19
+  |
+5 |     #[result(name="a_töken")]
+  |                   ^^^^^^^^^

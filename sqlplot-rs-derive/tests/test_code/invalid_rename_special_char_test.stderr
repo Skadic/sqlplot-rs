@@ -1,0 +1,5 @@
+error: must start with an alphabetic character or underscore
+ --> tests/test_code/invalid_rename_special_char_test.rs:5:19
+  |
+5 |     #[result(name="6atoken")]
+  |                   ^^^^^^^^^
