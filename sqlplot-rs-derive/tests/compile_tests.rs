@@ -9,8 +9,10 @@ fn trait_exists_test() {
 }
 
 #[test]
-fn skip_compile_test() {
-    trybuild::TestCases::new().pass("tests/test_code/skip_compile_test.rs");
+fn skip_test() {
+    let t = trybuild::TestCases::new();
+    t.pass("tests/test_code/skip_compile_test.rs");
+    t.compile_fail("tests/test_code/invalid_skip_argument_test.rs");
 }
 
 #[test]

@@ -1,12 +1,13 @@
 use itertools::intersperse;
 use proc_macro::TokenStream as RawTokenStream;
-use proc_macro2::{Punct, Span, TokenStream, TokenTree};
-use quote::{__private::ext::RepToTokensExt, quote};
+use proc_macro2::{Span, TokenStream};
+use quote::quote;
 use syn::{
     parse_macro_input,
     spanned::Spanned,
     token::{Enum, Union},
-    Attribute, Data, DataEnum, DataUnion, DeriveInput, Field, Ident, Lit, LitStr,
+    Attribute, Data, DataEnum, DataUnion, DeriveInput, Expr, ExprAssign, Field, Ident,
+    Lit, LitStr, ExprLit,
 };
 
 #[proc_macro_derive(ResultLine, attributes(result, skip))]
@@ -58,7 +59,7 @@ fn result_line_impl(struct_name: Ident, fields: impl IntoIterator<Item = Field>)
     let num_fields = fields.len();
 
     let brackets = intersperse(
-        std::iter::repeat(LitStr::new("{}={}", Span::call_site())).take(num_fields),
+        std::iter::repeat(LitStr::new("{}={:?}", Span::call_site())).take(num_fields),
         LitStr::new(" ", Span::call_site()),
     );
 
@@ -103,21 +104,16 @@ fn parse_field_attr(attrs: &[Attribute]) -> Result<FieldAttr, syn::Error> {
 
     // Handle all attributes
     for attr in attrs {
-        let path = &attr.path.segments;
+        let path = &attr.path().segments;
         let attr_ident = &path[0].ident;
 
         match attr_ident.to_string().as_str() {
             "skip" => {
-                if !attr.tokens.is_empty() {
-                    return Err(syn::Error::new(
-                        attr.tokens.span(),
-                        "skip does not expect any arguments",
-                    ));
-                }
+                attr.meta.require_path_only()?;
                 attr_info.skip = true;
                 return Ok(attr_info);
             }
-            "result" => attr_info.rename = Some(parse_result_attr(attr_ident, attr)?),
+            "result" => attr_info.rename = Some(parse_result_attr(attr)?),
             _ => return Err(syn::Error::new(attr_ident.span(), "unimplemented")),
         }
     }
@@ -125,96 +121,36 @@ fn parse_field_attr(attrs: &[Attribute]) -> Result<FieldAttr, syn::Error> {
     Ok(attr_info)
 }
 
-fn parse_result_attr(attr_ident: &Ident, attr: &Attribute) -> Result<LitStr, syn::Error> {
-    if attr.tokens.is_empty() {
-        return Err(syn::Error::new(
-            attr_ident.span(),
-            "expected: `result(name = \"...\")`",
-        ));
-    }
-
-    // Ensure we have some content to begin with
-    let Some(TokenTree::Group(group)) = attr.tokens.clone().into_iter().next() else {
-        return Err(syn::Error::new(
-            attr.tokens.span(),
-            "expected: `result(name = \"...\")`",
-        ));
-    };
-
-    // Ensure the content is delimited by parentheses
-    match group.delimiter() {
-        proc_macro2::Delimiter::Parenthesis => {}
-        _ => {
-            return Err(syn::Error::new(
-                group.delim_span().span(),
-                "expected: `result(name = \"...\")`",
-            ));
-        }
-    }
-
-    // Extract content from group
-    let mut content = match group.stream().next() {
-        Some(cnt) => cnt,
-        None => {
-            return Err(syn::Error::new(
-                group.span(),
-                "expected: `result(name = \"...\")`",
-            ));
-        }
-    }
-    .clone()
-    .into_iter();
-
-    // "name" token
-    match content.next() {
-        Some(ident @ TokenTree::Ident(..)) if ident.to_string() == "name" => {}
-        Some(token) => {
-            return Err(syn::Error::new(token.span(), "expected \"name\""));
-        }
-        None => {
-            return Err(syn::Error::new(
-                group.span(),
-                "expected: `result(name = \"...\")`",
-            ));
-        }
-    }
-
-    // The '='
-    match content.next() {
-        Some(TokenTree::Punct(p @ Punct { .. })) if p.as_char() == '=' => {}
-        Some(token) => {
-            return Err(syn::Error::new(token.span(), "expected \'=\'"));
-        }
-        None => {
-            return Err(syn::Error::new(
-                group.span(),
-                "expected: `result(name = \"...\")`",
-            ));
-        }
-    }
-
-    // The rename string
-    let rename_str = match content.next() {
-        Some(TokenTree::Literal(lit)) => {
-            let span = lit.span();
-            match Lit::new(lit) {
-                Lit::Str(str_lit) => str_lit,
-                // If this is anything but a string literal, it's an error
-                _ => {
-                    return Err(syn::Error::new(span, "expected string literal identifier"));
-                }
+fn parse_result_attr(attr: &Attribute) -> Result<LitStr, syn::Error> {
+    attr.meta.require_list()?;
+    let name_expr = attr.parse_args::<ExprAssign>()?;
+    // The left side must simply be "name"
+    match name_expr.left.as_ref() {
+        Expr::Path(ident) => {
+            let name_ident = Ident::new("name", ident.span());
+            // This should only be the name identifier
+            if !ident.path.is_ident(&name_ident) {
+                return Err(syn::Error::new(ident.span(), "expected `name`"));
             }
         }
-        Some(token) => {
-            return Err(syn::Error::new(token.span(), "expected a string literal"));
-        }
-        None => {
+        // If there is some other expression, this is wrong
+        _ => {
             return Err(syn::Error::new(
-                group.span(),
-                "expected: `result(name = \"...\")`",
-            ));
+                name_expr.span(),
+                "expected `name = \"...\"`",
+            ))
         }
-    };
+    }
+
+    let rename_str = match name_expr.right.as_ref() {
+        Expr::Lit(ExprLit { lit: Lit::Str(lit), ..}) => lit,
+        ex => {
+            return Err(syn::Error::new(
+                ex.span(),
+                "expected string literal",
+            ))
+        }
+    }.clone();
 
     let rename_str_value = rename_str.value();
     let rename_str_span = rename_str.span();

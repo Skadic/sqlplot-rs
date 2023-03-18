@@ -18,5 +18,5 @@ fn rename_test() {
         c: -5.5
     };
 
-    assert_eq!(s.to_result_line().as_str(), "RESULT a_token=xyz b=1 my_c_token=-5.5");
+    assert_eq!(s.to_result_line().as_str(), "RESULT a_token=\"xyz\" b=1 my_c_token=-5.5");
 }

@@ -18,5 +18,5 @@ fn rename_test() {
         c: -5.5
     };
 
-    assert_eq!(s.to_result_line().as_str(), "RESULT a=xyz c=-5.5");
+    assert_eq!(s.to_result_line().as_str(), "RESULT a=\"xyz\" c=-5.5");
 }
