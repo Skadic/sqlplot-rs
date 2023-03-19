@@ -8,3 +8,5 @@ edition = "2021"
 [dependencies]
 sqlplot-rs-core = { path = "../sqlplot-rs-core" }
 sqlplot-rs-derive = { path = "../sqlplot-rs-derive" }
+sqlite = "0.30.4"
+nom = "7"
